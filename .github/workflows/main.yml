@@ -1,0 +1,59 @@
+name: Daily Fund NAV Update
+
+on:
+  schedule:
+    # 17:00 Asia/Ho_Chi_Minh (UTC+7) = 10:00 UTC
+    - cron: "0 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-nav:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests python-dotenv
+
+      - name: Run NAV update script
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          HEADERS: ${{ secrets.HEADERS }}
+          PAYLOAD: ${{ secrets.PAYLOAD }}
+          CONFIG_FUNDS: ${{ secrets.CONFIG_FUNDS }}
+          GG_API_KEY: ${{ secrets.GG_API_KEY }}
+          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
+        run: python data_update.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name "update"
+          git config user.email "update@github"
+
+          git add data/*.csv
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          GIT_AUTHOR_NAME="update" \
+          GIT_AUTHOR_EMAIL="update@github" \
+          GIT_COMMITTER_NAME="update" \
+          GIT_COMMITTER_EMAIL="update@github" \
+          git commit -m "chore: update fund NAV data $(TZ='Asia/Ho_Chi_Minh' date +'%Y-%m-%d')"
+          git push
